@@ -7,7 +7,7 @@ const app = express();
 const cors = require('cors');
 const deviceSimulator = require('./services/deviceSimulator');
 const supabase = require('./config/supabase');
-import cors from "cors";
+const cors = require('cors');
 
 
 const PORT = process.env.PORT || 8080;
@@ -21,70 +21,74 @@ const allowedOrigins = [
 ];
 
 console.log('✅ Allowed origins:', allowedOrigins);
-app.use(cors({
-  origin: "https://main.d385jmcqgfjtrz.amplifyapp.com",
+const corsOptions = {
+  origin: 'https://main.d385jmcqgfjtrz.amplifyapp.com',
   credentials: true,
-  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: [
-    "Content-Type",
-    "Authorization",
-    "X-Admin-Passkey",
-    "X-Requested-With",
-    "Accept",
-    "Origin"
-  ]
-}));
+    'Content-Type',
+    'Authorization',
+    'X-Admin-Passkey',
+    'X-Requested-With',
+    'Accept',
+    'Origin'
+  ],
+  optionsSuccessStatus: 200
+};
+
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
 
 // 🔥 THIS LINE IS CRITICAL
-app.options("*", cors());
+// app.options("*", cors());
 // ✅ CRITICAL: CORS must be configured BEFORE routes
-app.use(cors({
-  origin: function(origin, callback) {
-    console.log('🔍 CORS Check - Origin:', origin);
+// app.use(cors({
+//   origin: function(origin, callback) {
+//     console.log('🔍 CORS Check - Origin:', origin);
     
-    // Allow requests with no origin (mobile apps, Postman, curl)
-    if (!origin) {
-      console.log('✅ No origin - allowing (Postman/mobile)');
-      return callback(null, true);
-    }
+//     // Allow requests with no origin (mobile apps, Postman, curl)
+//     if (!origin) {
+//       console.log('✅ No origin - allowing (Postman/mobile)');
+//       return callback(null, true);
+//     }
     
-    // Check if origin is allowed
-    const isAllowed = allowedOrigins.some(allowedOrigin => {
-      if (typeof allowedOrigin === 'string') {
-        const match = origin === allowedOrigin;
-        if (match) console.log(`✅ String match: ${origin} === ${allowedOrigin}`);
-        return match;
-      }
-      if (allowedOrigin instanceof RegExp) {
-        const match = allowedOrigin.test(origin);
-        if (match) console.log(`✅ Regex match: ${origin} matches ${allowedOrigin}`);
-        return match;
-      }
-      return false;
-    });
+//     // Check if origin is allowed
+//     const isAllowed = allowedOrigins.some(allowedOrigin => {
+//       if (typeof allowedOrigin === 'string') {
+//         const match = origin === allowedOrigin;
+//         if (match) console.log(`✅ String match: ${origin} === ${allowedOrigin}`);
+//         return match;
+//       }
+//       if (allowedOrigin instanceof RegExp) {
+//         const match = allowedOrigin.test(origin);
+//         if (match) console.log(`✅ Regex match: ${origin} matches ${allowedOrigin}`);
+//         return match;
+//       }
+//       return false;
+//     });
     
-    if (isAllowed) {
-      console.log('✅ CORS - Origin allowed:', origin);
-      callback(null, true);
-    } else {
-      console.log('❌ CORS - Origin blocked:', origin);
-      console.log('   Add this domain to allowedOrigins in server.js');
-      callback(new Error('Not allowed by CORS'));
-    }
-  },
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-  allowedHeaders: [
-    'Content-Type', 
-    'Authorization', 
-    'x-admin-passkey',
-    'Accept',
-    'Origin',
-    'X-Requested-With',
-  ],
-  exposedHeaders: ['Content-Length', 'X-Request-Id'],
-  maxAge: 86400, // 24 hours
-}));
+//     if (isAllowed) {
+//       console.log('✅ CORS - Origin allowed:', origin);
+//       callback(null, true);
+//     } else {
+//       console.log('❌ CORS - Origin blocked:', origin);
+//       console.log('   Add this domain to allowedOrigins in server.js');
+//       callback(new Error('Not allowed by CORS'));
+//     }
+//   },
+//   credentials: true,
+//   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+//   allowedHeaders: [
+//     'Content-Type', 
+//     'Authorization', 
+//     'x-admin-passkey',
+//     'Accept',
+//     'Origin',
+//     'X-Requested-With',
+//   ],
+//   exposedHeaders: ['Content-Length', 'X-Request-Id'],
+//   maxAge: 86400, // 24 hours
+// }));
 
 // ✅ Parse JSON and URL-encoded data
 app.use(express.json());
