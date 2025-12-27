@@ -1,5 +1,5 @@
-// FILE: infinosbackend/server.js (REPLACE ENTIRE FILE)
-// PRODUCTION READY - Fixed port 8080 and CORS configuration
+// FILE: infinosbackend/server.js
+// PRODUCTION READY - Fixed CORS and configuration
 
 require('dotenv').config();
 const express = require('express');
@@ -20,24 +20,39 @@ const testAPIRouter = require('./routes/testAPI');
 const DeviceRouter = require('./routes/Device');
 const authRouter = require('./routes/auth');
 
-// CORS Configuration - Add your Amplify URL after frontend deployment
+// FIXED CORS Configuration
 const allowedOrigins = [
   'http://localhost:3000',
-  'https://main.d1a2b3c4d5e6.amplifyapp.com',  // ← Your Amplify URL
+  'https://main.d385jmcqgfjtrz.amplifyapp.com', // ← NO trailing slash!
+  /^https:\/\/.*\.amplifyapp\.com$/ // ← Proper regex for all Amplify branches
 ];
 
 app.use(cors({
   origin: function(origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl requests)
+    // Allow requests with no origin (mobile apps, curl, Postman)
     if (!origin) return callback(null, true);
     
-    if (allowedOrigins.indexOf(origin) === -1) {
-      const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
-      return callback(new Error(msg), false);
+    // Check if origin matches any allowed pattern
+    const isAllowed = allowedOrigins.some(allowedOrigin => {
+      if (typeof allowedOrigin === 'string') {
+        return origin === allowedOrigin;
+      }
+      if (allowedOrigin instanceof RegExp) {
+        return allowedOrigin.test(origin);
+      }
+      return false;
+    });
+    
+    if (isAllowed) {
+      callback(null, true);
+    } else {
+      console.log('❌ CORS blocked origin:', origin);
+      callback(new Error('Not allowed by CORS'));
     }
-    return callback(null, true);
   },
-  credentials: true
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-admin-passkey']
 }));
 
 app.use(express.json());
@@ -52,7 +67,8 @@ app.get('/health', (req, res) => {
     environment: process.env.NODE_ENV || 'development',
     port: PORT,
     activeSimulations: runningSimulations.length,
-    simulatingDevices: runningSimulations
+    simulatingDevices: runningSimulations,
+    supabaseConnected: !!process.env.SUPABASE_URL
   });
 });
 
@@ -78,7 +94,7 @@ app.post('/admin/add-device', async (req, res) => {
     const { name, device_code, bag_type, admin_key } = req.body;
 
     // Check admin key
-    if (admin_key !== process.env.ADMIN_KEY) {
+    if (admin_key !== process.env.ADMIN_PASSKEY) {
       return res.status(403).json({ message: 'Invalid admin key' });
     }
 
@@ -98,7 +114,7 @@ app.post('/admin/add-device', async (req, res) => {
       return res.status(400).json({ message: 'Device code already exists' });
     }
 
-    // Generate device secret (random 32-character hex string)
+    // Generate device secret
     const device_secret = require('crypto').randomBytes(16).toString('hex');
 
     // Create device
@@ -135,14 +151,15 @@ app.post('/admin/add-device', async (req, res) => {
 app.listen(PORT, async () => {
   console.log(`🚀 Server is running on Port: ${PORT}`);
   console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`🔗 Supabase URL: ${process.env.SUPABASE_URL ? 'Connected' : 'Missing'}`);
   console.log(`✅ Auth routes mounted at /auth`);
   
-  // Initialize device simulator for all online devices
+  // Initialize device simulator
   console.log('\n🔄 Initializing device simulator...');
   setTimeout(async () => {
     await deviceSimulator.initializeAllSimulations();
     console.log('✅ Device simulator ready\n');
-  }, 2000); // Wait 2 seconds for server to be fully ready
+  }, 2000);
 });
 
 // Graceful shutdown
