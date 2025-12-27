@@ -7,20 +7,10 @@ const app = express();
 const cors = require('cors');
 const deviceSimulator = require('./services/deviceSimulator');
 const supabase = require('./config/supabase');
-const cors = require('cors');
-
 
 const PORT = process.env.PORT || 8080;
 
-// ✅ FIXED: Allow your Amplify frontend domain
-const allowedOrigins = [
-  'http://localhost:3000',
-  'https://main.d385jmcqgfjtrz.amplifyapp.com',  // Your Amplify domain
-  'https://d385jmcqgfjtrz.amplifyapp.com',        // Root Amplify domain
-  /^https:\/\/.*\.d385jmcqgfjtrz\.amplifyapp\.com$/,  // All Amplify branches
-];
-
-console.log('✅ Allowed origins:', allowedOrigins);
+// ✅ FIXED: Single CORS configuration for Amplify frontend
 const corsOptions = {
   origin: 'https://main.d385jmcqgfjtrz.amplifyapp.com',
   credentials: true,
@@ -37,58 +27,10 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
+app.options('*', (req, res) => {
+  res.sendStatus(200);
+});
 app.options('*', cors(corsOptions));
-
-// 🔥 THIS LINE IS CRITICAL
-// app.options("*", cors());
-// ✅ CRITICAL: CORS must be configured BEFORE routes
-// app.use(cors({
-//   origin: function(origin, callback) {
-//     console.log('🔍 CORS Check - Origin:', origin);
-    
-//     // Allow requests with no origin (mobile apps, Postman, curl)
-//     if (!origin) {
-//       console.log('✅ No origin - allowing (Postman/mobile)');
-//       return callback(null, true);
-//     }
-    
-//     // Check if origin is allowed
-//     const isAllowed = allowedOrigins.some(allowedOrigin => {
-//       if (typeof allowedOrigin === 'string') {
-//         const match = origin === allowedOrigin;
-//         if (match) console.log(`✅ String match: ${origin} === ${allowedOrigin}`);
-//         return match;
-//       }
-//       if (allowedOrigin instanceof RegExp) {
-//         const match = allowedOrigin.test(origin);
-//         if (match) console.log(`✅ Regex match: ${origin} matches ${allowedOrigin}`);
-//         return match;
-//       }
-//       return false;
-//     });
-    
-//     if (isAllowed) {
-//       console.log('✅ CORS - Origin allowed:', origin);
-//       callback(null, true);
-//     } else {
-//       console.log('❌ CORS - Origin blocked:', origin);
-//       console.log('   Add this domain to allowedOrigins in server.js');
-//       callback(new Error('Not allowed by CORS'));
-//     }
-//   },
-//   credentials: true,
-//   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-//   allowedHeaders: [
-//     'Content-Type', 
-//     'Authorization', 
-//     'x-admin-passkey',
-//     'Accept',
-//     'Origin',
-//     'X-Requested-With',
-//   ],
-//   exposedHeaders: ['Content-Length', 'X-Request-Id'],
-//   maxAge: 86400, // 24 hours
-// }));
 
 // ✅ Parse JSON and URL-encoded data
 app.use(express.json());
@@ -247,11 +189,7 @@ app.listen(PORT, async () => {
   console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`🔗 Supabase: ${process.env.SUPABASE_URL ? '✅ Connected' : '❌ Missing'}`);
   console.log(`🔑 Admin Passkey: ${process.env.ADMIN_PASSKEY ? '✅ Configured' : '⚠️ Using default'}`);
-  console.log('='.repeat(60));
-  console.log('📋 Allowed Origins:');
-  allowedOrigins.forEach(origin => {
-    console.log(`   - ${origin}`);
-  });
+  console.log(`🔐 CORS Origin: https://main.d385jmcqgfjtrz.amplifyapp.com`);
   console.log('='.repeat(60));
   console.log('');
   
