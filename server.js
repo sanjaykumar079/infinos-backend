@@ -11,6 +11,14 @@ const supabase = require('./config/supabase');
 app.listen(process.env.PORT || 8080, '0.0.0.0', () => {
   console.log('Server listening on port', process.env.PORT || 8080);
 });
+app.use((req, res, next) => {
+  res.header(
+    'Access-Control-Allow-Origin',
+    'https://main.d385jmcqgfjtrz.amplifyapp.com'
+  );
+  res.header('Access-Control-Allow-Credentials', 'true');
+  next();
+});
 
 // ✅ FIXED: Single CORS configuration for Amplify frontend
 const corsOptions = {
