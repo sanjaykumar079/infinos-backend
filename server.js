@@ -12,7 +12,8 @@ const app = express();
 /* =========================
    PORT (FIXED)
 ========================= */
-const PORT = process.env.PORT || 8080;
+// const PORT = process.env.PORT || 8080;
+app.listen(process.env.PORT)
 
 /* =========================
    CORS (SINGLE SOURCE OF TRUTH)
@@ -98,10 +99,16 @@ app.listen(PORT, async () => {
   console.log(`🔐 CORS: ${corsOptions.origin}`);
   console.log('='.repeat(60));
 
-  console.log('🔄 Initializing device simulator...');
-  await deviceSimulator.initializeAllSimulations();
-  console.log('✅ Device simulator ready\n');
+  try {
+    console.log('🔄 Initializing device simulator...');
+    await deviceSimulator.initializeAllSimulations();
+    console.log('✅ Device simulator ready\n');
+  } catch (err) {
+    console.error('❌ Simulator init failed:', err);
+    // IMPORTANT: do NOT crash the server
+  }
 });
+
 
 /* =========================
    GRACEFUL SHUTDOWN
