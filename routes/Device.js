@@ -1,17 +1,67 @@
 // FILE: infinosbackend/routes/Device.js
-// UPDATED - Add simulator integration when device status changes
+// FIXED - Proper Supabase JWT validation
 
 const express = require('express');
 const router = express.Router();
 const supabase = require('../config/supabase');
-const { verifyToken, verifyAdmin, optionalAuth } = require('../middleware/authMiddleware');
 const crypto = require('crypto');
-const deviceSimulator = require('../services/deviceSimulator'); // ADD THIS
+const deviceSimulator = require('../services/deviceSimulator');
 
-// ... (keep all existing helper functions and routes)
+// ============================================
+// ✅ FIXED AUTHENTICATION MIDDLEWARE
+// ============================================
+
+// Verify Supabase JWT token
+async function verifySupabaseUser(req, res, next) {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader) {
+      return res.status(401).json({ error: 'Missing Authorization header' });
+    }
+
+    const token = authHeader.replace('Bearer ', '');
+
+    const { data, error } = await supabase.auth.getUser(token);
+
+    if (error || !data?.user) {
+      console.error('Supabase auth error:', error);
+      return res.status(401).json({ error: 'Invalid or expired token' });
+    }
+
+    req.user = { id: data.user.id, email: data.user.email }; // Attach user info
+    next();
+  } catch (err) {
+    console.error('Auth verification failed:', err);
+    res.status(500).json({ error: 'Auth verification failed' });
+  }
+}
+
+// Optional auth - for device endpoints that can work with or without auth
+async function optionalSupabaseAuth(req, res, next) {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader) {
+      return next(); // No auth provided, continue anyway
+    }
+
+    const token = authHeader.replace('Bearer ', '');
+    const { data, error } = await supabase.auth.getUser(token);
+
+    if (!error && data?.user) {
+      req.user = { id: data.user.id, email: data.user.email };
+    }
+    
+    next();
+  } catch (err) {
+    console.error('Optional auth error:', err);
+    next(); // Continue even if auth fails
+  }
+}
+
+// Admin passkey authentication
 const authenticateAdminPasskey = (req, res, next) => {
   const adminPasskey = req.headers['x-admin-passkey'];
-  const ADMIN_PASSKEY = process.env.ADMIN_PASSKEY || 'infinos-admin-2024';
+  const ADMIN_PASSKEY = process.env.ADMIN_PASSKEY || 'INFINOS2025ADMIN';
 
   if (!adminPasskey || adminPasskey !== ADMIN_PASSKEY) {
     return res.status(403).json({ message: 'Unauthorized: Invalid admin passkey' });
@@ -20,84 +70,20 @@ const authenticateAdminPasskey = (req, res, next) => {
   next();
 };
 
-// Admin: Create new device
-router.post('/create', authenticateAdminPasskey, async (req, res) => {
-  try {
-    const { name, device_code, bag_type } = req.body;
+// ============================================
+// HELPER FUNCTIONS
+// ============================================
 
-    // Validate required fields
-    if (!name || !device_code || !bag_type) {
-      return res.status(400).json({ 
-        message: 'Missing required fields: name, device_code, and bag_type are required' 
-      });
-    }
-
-    // Check if device code already exists
-    const existingDevice = await Device.findOne({ device_code });
-    if (existingDevice) {
-      return res.status(400).json({ 
-        message: 'Device code already exists. Please use a unique code.' 
-      });
-    }
-
-    // Validate bag type
-    const validBagTypes = ['dual-zone', 'heating-only', 'cooling-only'];
-    if (!validBagTypes.includes(bag_type)) {
-      return res.status(400).json({ 
-        message: 'Invalid bag type. Must be: dual-zone, heating-only, or cooling-only' 
-      });
-    }
-
-    // Create new device
-    const newDevice = new Device({
-      name,
-      device_code,
-      bag_type,
-      status: false,
-      is_claimed: false,
-      battery_charge_level: 100,
-      hot_zone_current_temp: 0,
-      hot_zone_target_temp: 0,
-      hot_zone_heater_on: false,
-      hot_zone_fan_on: false,
-      cold_zone_current_temp: 0,
-      cold_zone_target_temp: 0,
-      cold_zone_cooler_on: false,
-      cold_zone_fan_on: false,
-      safety_low_temp: 0,
-      safety_high_temp: 100,
-      last_seen: null
-    });
-
-    await newDevice.save();
-
-    res.status(201).json({
-      message: 'Device created successfully',
-      device: newDevice
-    });
-
-  } catch (err) {
-    console.error('Error creating device:', err);
-    res.status(500).json({ 
-      message: 'Failed to create device',
-      error: err.message 
-    });
-  }
-});
-
-// Helper function to generate device code
 const generateDeviceCode = () => {
   const part1 = Math.random().toString(36).substring(2, 6).toUpperCase();
   const part2 = Math.random().toString(36).substring(2, 6).toUpperCase();
   return `INF-${part1}-${part2}`;
 };
 
-// Helper function to generate device secret
 const generateDeviceSecret = () => {
   return crypto.randomBytes(32).toString('hex');
 };
 
-// Normalize Supabase rows into the shape expected by the frontend
 const formatDeviceListItem = (device) => ({
   _id: device.id,
   id: device.id,
@@ -106,14 +92,14 @@ const formatDeviceListItem = (device) => ({
   bagType: device.bag_type,
   status: device.status,
   lastSeen: device.last_seen,
-  hotZone: {
+  hotZone: device.bag_type !== 'cooling-only' ? {
     currentTemp: device.hot_zone_current_temp,
     targetTemp: device.hot_zone_target_temp,
     currentHumidity: device.hot_zone_current_humidity,
     heaterOn: device.hot_zone_heater_on,
     fanOn: device.hot_zone_fan_on,
-  },
-  coldZone: device.bag_type === 'dual-zone' ? {
+  } : null,
+  coldZone: device.bag_type !== 'heating-only' ? {
     currentTemp: device.cold_zone_current_temp,
     targetTemp: device.cold_zone_target_temp,
     currentHumidity: device.cold_zone_current_humidity,
@@ -133,7 +119,7 @@ const formatDeviceListItem = (device) => ({
 });
 
 // ============================================
-// PUBLIC ENDPOINTS
+// PUBLIC ENDPOINTS (No Auth Required)
 // ============================================
 
 // Authenticate device (for simulator/hardware)
@@ -201,7 +187,8 @@ router.get('/verify-code', async (req, res) => {
       device: {
         deviceCode: device.device_code,
         bagType: device.bag_type,
-        bagTypeName: device.bag_type === 'dual-zone' ? 'Hot & Cold Zones' : 'Heating Only',
+        bagTypeName: device.bag_type === 'dual-zone' ? 'Hot & Cold Zones' : 
+                     device.bag_type === 'cooling-only' ? 'Cooling Only' : 'Heating Only',
         hardwareVersion: device.hardware_version,
         manufacturingDate: device.manufacturing_date
       }
@@ -213,11 +200,11 @@ router.get('/verify-code', async (req, res) => {
 });
 
 // ============================================
-// AUTHENTICATED USER ENDPOINTS
+// ✅ AUTHENTICATED USER ENDPOINTS (FIXED)
 // ============================================
 
 // Claim device
-router.post('/claim', verifyToken, async (req, res) => {
+router.post('/claim', verifySupabaseUser, async (req, res) => {
   try {
     const { deviceCode, ownerId, deviceName } = req.body;
 
@@ -279,9 +266,13 @@ router.post('/claim', verifyToken, async (req, res) => {
 });
 
 // Get user's devices
-router.get('/my-devices', verifyToken, async (req, res) => {
+router.get('/my-devices', verifySupabaseUser, async (req, res) => {
   try {
     const { ownerId } = req.query;
+
+    if (!ownerId) {
+      return res.status(400).json({ error: 'ownerId is required' });
+    }
 
     if (req.user.id !== ownerId) {
       return res.status(403).json({ 
@@ -306,10 +297,14 @@ router.get('/my-devices', verifyToken, async (req, res) => {
   }
 });
 
-// Get device summary
-router.get('/summary', verifyToken, async (req, res) => {
+// Get device summary - ✅ THIS IS THE MAIN FIX FOR YOUR DASHBOARD
+router.get('/summary', verifySupabaseUser, async (req, res) => {
   try {
     const { ownerId } = req.query;
+
+    if (!ownerId) {
+      return res.status(400).json({ error: 'ownerId is required' });
+    }
 
     if (req.user.id !== ownerId) {
       return res.status(403).json({ 
@@ -329,6 +324,7 @@ router.get('/summary', verifyToken, async (req, res) => {
     const online = devices.filter(d => d.status === true).length;
     const dualZone = devices.filter(d => d.bag_type === 'dual-zone').length;
     const heatingOnly = devices.filter(d => d.bag_type === 'heating-only').length;
+    const coolingOnly = devices.filter(d => d.bag_type === 'cooling-only').length;
 
     const formattedDevices = (devices || []).map(formatDeviceListItem);
 
@@ -338,6 +334,7 @@ router.get('/summary', verifyToken, async (req, res) => {
       offlineDevices: total - online,
       dualZoneBags: dualZone,
       heatingOnlyBags: heatingOnly,
+      coolingOnlyBags: coolingOnly,
       devices: formattedDevices,
     });
   } catch (err) {
@@ -347,9 +344,13 @@ router.get('/summary', verifyToken, async (req, res) => {
 });
 
 // Get specific device
-router.get('/get_device', verifyToken, async (req, res) => {
+router.get('/get_device', verifySupabaseUser, async (req, res) => {
   try {
     const { device_id } = req.query;
+
+    if (!device_id) {
+      return res.status(400).json({ error: 'device_id is required' });
+    }
 
     const { data: device, error } = await supabase
       .from('devices')
@@ -394,7 +395,7 @@ router.get('/get_device', verifyToken, async (req, res) => {
     const formattedDevice = {
       ...device,
       _id: device.id,
-      hotZone: {
+      hotZone: device.bag_type !== 'cooling-only' ? {
         currentTemp: device.hot_zone_current_temp,
         targetTemp: device.hot_zone_target_temp,
         currentHumidity: device.hot_zone_current_humidity,
@@ -408,8 +409,8 @@ router.get('/get_device', verifyToken, async (req, res) => {
           value: r.humidity, 
           timestamp: r.timestamp 
         })) || []
-      },
-      coldZone: device.bag_type === 'dual-zone' ? {
+      } : null,
+      coldZone: device.bag_type !== 'heating-only' ? {
         currentTemp: device.cold_zone_current_temp,
         targetTemp: device.cold_zone_target_temp,
         currentHumidity: device.cold_zone_current_humidity,
@@ -447,8 +448,8 @@ router.get('/get_device', verifyToken, async (req, res) => {
   }
 });
 
-// ⭐ UPDATED - Update device status with simulator integration
-router.post('/update_device', optionalAuth, async (req, res) => {
+// Update device status with simulator integration
+router.post('/update_device', optionalSupabaseAuth, async (req, res) => {
   try {
     const { device_id, status } = req.body;
 
@@ -479,13 +480,11 @@ router.post('/update_device', optionalAuth, async (req, res) => {
 
     if (error) throw error;
 
-    // ⭐ START/STOP SIMULATOR BASED ON STATUS
+    // Start/stop simulator based on status
     if (status === true) {
-      // Device turned ON - start simulation
       console.log(`🟢 Device ${device_id} turned ON - starting simulator`);
       await deviceSimulator.startSimulation(device_id);
     } else {
-      // Device turned OFF - stop simulation
       console.log(`🔴 Device ${device_id} turned OFF - stopping simulator`);
       deviceSimulator.stopSimulation(device_id);
     }
@@ -497,13 +496,11 @@ router.post('/update_device', optionalAuth, async (req, res) => {
   }
 });
 
-// Update hot zone (keep existing - simulator will handle readings)
-// Update hot zone (keep existing - simulator will handle readings)
-router.post('/update_hot_zone', optionalAuth, async (req, res) => {
+// Update hot zone
+router.post('/update_hot_zone', optionalSupabaseAuth, async (req, res) => {
   try {
     const { device_id, temp, humidity } = req.body;
 
-    // ✅ ADD THIS CHECK - cooling-only bags don't have hot zone
     const { data: device } = await supabase
       .from('devices')
       .select('bag_type')
@@ -544,10 +541,8 @@ router.post('/update_hot_zone', optionalAuth, async (req, res) => {
   }
 });
 
-// Update cold zone (keep existing)
-// Update cold zone (keep existing)
-// Update cold zone (keep existing)
-router.post('/update_cold_zone', optionalAuth, async (req, res) => {
+// Update cold zone
+router.post('/update_cold_zone', optionalSupabaseAuth, async (req, res) => {
   try {
     const { device_id, temp, humidity } = req.body;
 
@@ -557,7 +552,6 @@ router.post('/update_cold_zone', optionalAuth, async (req, res) => {
       .eq('id', device_id)
       .single();
 
-    // ✅ CHANGE THIS - cold zone exists for dual-zone AND cooling-only
     if (device?.bag_type === 'heating-only') {
       return res.status(400).json({ message: "This bag doesn't have a cold zone" });
     }
@@ -592,8 +586,8 @@ router.post('/update_cold_zone', optionalAuth, async (req, res) => {
   }
 });
 
-// Update battery (keep existing)
-router.post('/update_battery', optionalAuth, async (req, res) => {
+// Update battery
+router.post('/update_battery', optionalSupabaseAuth, async (req, res) => {
   try {
     const { device_id, charge_level, voltage, is_charging } = req.body;
 
@@ -629,32 +623,28 @@ router.post('/update_battery', optionalAuth, async (req, res) => {
 });
 
 // Update hot zone settings
-// Update hot zone settings
-router.post('/update_hot_zone_settings', verifyToken, async (req, res) => {
+router.post('/update_hot_zone_settings', verifySupabaseUser, async (req, res) => {
   try {
     const { device_id, target_temp, heater_on, fan_on } = req.body;
 
     const { data: device } = await supabase
       .from('devices')
-      .select('owner_id, bag_type')  // ✅ ADD bag_type
+      .select('owner_id, bag_type')
       .eq('id', device_id)
       .single();
 
+    if (!device) {
+      return res.status(404).json({ message: 'Device not found' });
+    }
+
     if (device.owner_id !== req.user.id) {
       return res.status(403).json({ 
         message: 'Unauthorized to update this device' 
       });
     }
 
-    // ✅ ADD THIS CHECK
-    if (device?.bag_type === 'cooling-only') {
+    if (device.bag_type === 'cooling-only') {
       return res.status(400).json({ message: "This bag doesn't have a hot zone" });
-    }
-
-    if (device.owner_id !== req.user.id) {
-      return res.status(403).json({ 
-        message: 'Unauthorized to update this device' 
-      });
     }
 
     const { data, error } = await supabase
@@ -678,8 +668,7 @@ router.post('/update_hot_zone_settings', verifyToken, async (req, res) => {
 });
 
 // Update cold zone settings
-// Update cold zone settings
-router.post('/update_cold_zone_settings', verifyToken, async (req, res) => {
+router.post('/update_cold_zone_settings', verifySupabaseUser, async (req, res) => {
   try {
     const { device_id, target_temp, cooler_on, fan_on } = req.body;
 
@@ -689,14 +678,17 @@ router.post('/update_cold_zone_settings', verifyToken, async (req, res) => {
       .eq('id', device_id)
       .single();
 
+    if (!device) {
+      return res.status(404).json({ message: 'Device not found' });
+    }
+
     if (device.owner_id !== req.user.id) {
       return res.status(403).json({ 
         message: 'Unauthorized to update this device' 
       });
     }
 
-    // ✅ CHANGE THIS - cold zone exists for dual-zone AND cooling-only
-    if (device?.bag_type === 'heating-only') {
+    if (device.bag_type === 'heating-only') {
       return res.status(400).json({ message: "This bag doesn't have a cold zone" });
     }
 
@@ -721,7 +713,7 @@ router.post('/update_cold_zone_settings', verifyToken, async (req, res) => {
 });
 
 // Get alerts
-router.get('/alerts', verifyToken, async (req, res) => {
+router.get('/alerts', verifySupabaseUser, async (req, res) => {
   try {
     const { device_id } = req.query;
 
@@ -741,22 +733,24 @@ router.get('/alerts', verifyToken, async (req, res) => {
 
     const alerts = [];
 
-    if (device.hot_zone_current_temp < device.safety_min_temp) {
-      alerts.push({
-        type: 'danger',
-        zone: 'hot',
-        message: `Hot zone too cold: ${device.hot_zone_current_temp.toFixed(1)}°C`
-      });
-    }
-    if (device.hot_zone_current_temp > device.safety_max_temp) {
-      alerts.push({
-        type: 'danger',
-        zone: 'hot',
-        message: `Hot zone too hot: ${device.hot_zone_current_temp.toFixed(1)}°C`
-      });
+    if (device.bag_type !== 'cooling-only') {
+      if (device.hot_zone_current_temp < device.safety_min_temp) {
+        alerts.push({
+          type: 'danger',
+          zone: 'hot',
+          message: `Hot zone too cold: ${device.hot_zone_current_temp.toFixed(1)}°C`
+        });
+      }
+      if (device.hot_zone_current_temp > device.safety_max_temp) {
+        alerts.push({
+          type: 'danger',
+          zone: 'hot',
+          message: `Hot zone too hot: ${device.hot_zone_current_temp.toFixed(1)}°C`
+        });
+      }
     }
 
-    if (device.bag_type === 'dual-zone') {
+    if (device.bag_type !== 'heating-only') {
       if (device.cold_zone_current_temp < device.safety_min_temp) {
         alerts.push({
           type: 'danger',
@@ -792,17 +786,8 @@ router.get('/alerts', verifyToken, async (req, res) => {
 // ============================================
 
 // Get all devices (admin only)
-router.get('/all-devices', async (req, res) => {
+router.get('/all-devices', authenticateAdminPasskey, async (req, res) => {
   try {
-    const adminPasskey = req.headers['x-admin-passkey'];
-    const expectedPasskey = process.env.ADMIN_PASSKEY || 'INFINOS2025ADMIN';
-
-    if (!adminPasskey || adminPasskey !== expectedPasskey) {
-      return res.status(403).json({ 
-        message: 'Admin authentication required' 
-      });
-    }
-
     const { data: devices, error } = await supabase
       .from('devices')
       .select('*')
@@ -818,17 +803,8 @@ router.get('/all-devices', async (req, res) => {
 });
 
 // Get admin statistics
-router.get('/admin-stats', async (req, res) => {
+router.get('/admin-stats', authenticateAdminPasskey, async (req, res) => {
   try {
-    const adminPasskey = req.headers['x-admin-passkey'];
-    const expectedPasskey = process.env.ADMIN_PASSKEY || 'INFINOS2025ADMIN';
-
-    if (!adminPasskey || adminPasskey !== expectedPasskey) {
-      return res.status(403).json({ 
-        message: 'Admin authentication required' 
-      });
-    }
-
     const { data: devices, error } = await supabase
       .from('devices')
       .select('*');
@@ -839,6 +815,7 @@ router.get('/admin-stats', async (req, res) => {
     const onlineDevices = devices.filter(d => d.status === true).length;
     const dualZone = devices.filter(d => d.bag_type === 'dual-zone').length;
     const heatingOnly = devices.filter(d => d.bag_type === 'heating-only').length;
+    const coolingOnly = devices.filter(d => d.bag_type === 'cooling-only').length;
     const claimed = devices.filter(d => d.is_claimed === true).length;
     
     const uniqueOwners = new Set(
@@ -853,6 +830,7 @@ router.get('/admin-stats', async (req, res) => {
       offlineDevices: totalDevices - onlineDevices,
       dualZoneBags: dualZone,
       heatingOnlyBags: heatingOnly,
+      coolingOnlyBags: coolingOnly,
       claimedDevices: claimed,
       unclaimedDevices: totalDevices - claimed,
       uniqueOwners
@@ -864,19 +842,10 @@ router.get('/admin-stats', async (req, res) => {
 });
 
 // Seed devices (admin only)
-router.post('/seed-devices', async (req, res) => {
+router.post('/seed-devices', authenticateAdminPasskey, async (req, res) => {
   try {
-    const adminPasskey = req.headers['x-admin-passkey'];
-    const expectedPasskey = process.env.ADMIN_PASSKEY || 'INFINOS2025ADMIN';
-
-    if (!adminPasskey || adminPasskey !== expectedPasskey) {
-      return res.status(403).json({ 
-        message: 'Admin authentication required' 
-      });
-    }
-
     const { bagType, quantity } = req.body;
-// ✅ ADD 'cooling-only' to valid types
+
     if (!bagType || !['dual-zone', 'heating-only', 'cooling-only'].includes(bagType)) {
       return res.status(400).json({ 
         message: 'Invalid bag type. Must be "dual-zone", "heating-only", or "cooling-only"' 
@@ -891,7 +860,6 @@ router.post('/seed-devices', async (req, res) => {
 
     const devicesToCreate = [];
     for (let i = 0; i < quantity; i++) {
-      // ✅ CHANGE THIS LINE to include cooling-only
       const bagName = bagType === 'dual-zone' ? 'Dual-Zone' : 
                       bagType === 'cooling-only' ? 'Cooling-Only' : 
                       'Heating-Only';
@@ -914,9 +882,7 @@ router.post('/seed-devices', async (req, res) => {
         created_at: new Date().toISOString()
       };
 
-      // ✅ ADD THIS - Configure zones based on bag type
       if (bagType === 'cooling-only') {
-        // Cooling-only: No hot zone, only cold zone
         devicesToCreate.push({
           ...baseDevice,
           hot_zone_current_temp: null,
@@ -931,7 +897,6 @@ router.post('/seed-devices', async (req, res) => {
           cold_zone_fan_on: false,
         });
       } else if (bagType === 'heating-only') {
-        // Heating-only: Only hot zone, no cold zone
         devicesToCreate.push({
           ...baseDevice,
           hot_zone_current_temp: 25,
@@ -946,7 +911,6 @@ router.post('/seed-devices', async (req, res) => {
           cold_zone_fan_on: null,
         });
       } else {
-        // Dual-zone: Both hot and cold zones
         devicesToCreate.push({
           ...baseDevice,
           hot_zone_current_temp: 25,
