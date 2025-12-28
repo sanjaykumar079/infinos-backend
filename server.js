@@ -1,4 +1,4 @@
-// infinosbackend/server.js
+// infinosbackend/server.js - FIXED VERSION
 
 require('dotenv').config();
 const express = require('express');
@@ -14,19 +14,37 @@ const app = express();
 const PORT = process.env.PORT || 8080;
 
 /* =========================
-   CORS (FIXED + SAFE)
+   CORS (FIXED FOR AMPLIFY)
 ========================= */
 const corsOptions = {
-  origin: [
-    'https://main.d385jmcqgfjtrz.amplifyapp.com'
-  ],
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    const allowedOrigins = [
+      'https://main.d385jmcqgfjtrz.amplifyapp.com',
+      'http://localhost:3000',
+      'http://localhost:3001'
+    ];
+    
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      console.log('⚠️ CORS blocked origin:', origin);
+      callback(null, false);
+    }
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: [
     'Content-Type',
     'Authorization',
-    'x-admin-passkey'
+    'x-admin-passkey',
+    'X-Requested-With',
+    'Accept'
   ],
+  exposedHeaders: ['Content-Length', 'X-Request-Id'],
+  maxAge: 600
 };
 
 app.use(cors(corsOptions));
