@@ -5,29 +5,28 @@ const express = require('express');
 const cors = require('cors');
 
 const deviceSimulator = require('./services/deviceSimulator');
-const supabase = require('./config/supabase');
 
 const app = express();
 
 /* =========================
    PORT (FIXED)
 ========================= */
-// const PORT = process.env.PORT || 8080;
-app.listen(process.env.PORT)
+const PORT = process.env.PORT || 8080;
 
 /* =========================
-   CORS (SINGLE SOURCE OF TRUTH)
+   CORS (FIXED + SAFE)
 ========================= */
 const corsOptions = {
-  origin: 'https://main.d385jmcqgfjtrz.amplifyapp.com',
+  origin: [
+    'https://main.d385jmcqgfjtrz.amplifyapp.com'
+  ],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: [
     'Content-Type',
     'Authorization',
-    'X-Admin-Passkey'
+    'x-admin-passkey'
   ],
-  optionsSuccessStatus: 200
 };
 
 app.use(cors(corsOptions));
@@ -45,10 +44,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use((req, res, next) => {
   console.log(`📥 ${req.method} ${req.path}`);
   console.log('   Origin:', req.headers.origin || 'none');
-  console.log('   Headers:', {
-    auth: req.headers.authorization ? 'present' : 'none',
-    admin: req.headers['x-admin-passkey'] ? 'present' : 'none',
-  });
+  console.log('   Auth:', req.headers.authorization ? 'present' : 'none');
   next();
 });
 
@@ -65,13 +61,7 @@ app.get('/', (req, res) => {
 });
 
 app.get('/health', (req, res) => {
-  const sims = deviceSimulator.getRunningSimulations();
-  res.json({
-    status: 'OK',
-    port: PORT,
-    activeSimulations: sims.length,
-    supabaseConnected: !!process.env.SUPABASE_URL,
-  });
+  res.json({ status: 'OK' });
 });
 
 app.use('/device', require('./routes/Device'));
@@ -89,26 +79,22 @@ app.use((req, res) => {
 });
 
 /* =========================
-   START SERVER (ONLY ONCE)
+   START SERVER (ONCE)
 ========================= */
 app.listen(PORT, async () => {
   console.log('\n' + '='.repeat(60));
   console.log('🚀 INFINOS Backend Server Started');
   console.log(`📡 Port: ${PORT}`);
   console.log(`🌍 Env: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`🔐 CORS: ${corsOptions.origin}`);
   console.log('='.repeat(60));
 
   try {
-    console.log('🔄 Initializing device simulator...');
     await deviceSimulator.initializeAllSimulations();
     console.log('✅ Device simulator ready\n');
   } catch (err) {
     console.error('❌ Simulator init failed:', err);
-    // IMPORTANT: do NOT crash the server
   }
 });
-
 
 /* =========================
    GRACEFUL SHUTDOWN
