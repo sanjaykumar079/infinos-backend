@@ -18,18 +18,25 @@ const PORT = process.env.PORT || 8080;
 ========================= */
 const corsOptions = {
   origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps, Postman, curl)
+    // Allow requests with no origin (Postman, mobile apps)
     if (!origin) {
       return callback(null, true);
     }
     
     const allowedOrigins = [
-      // Production Amplify URL
+      // ✅ User App - Production (Amplify)
       'https://main.d385jmcqgfjtrz.amplifyapp.com',
-      // Development
-      'http://localhost:3000',
-      'http://localhost:3001',
-      'http://127.0.0.1:3000',
+      
+      // ✅ Admin App - Production (Amplify)
+      'https://main.d1zlp0touswuv6.amplifyapp.com',  // ⚠️ REPLACE THIS
+      
+      // ✅ Custom Domains (if you add them)
+      'https://app.infinos.com',
+      'https://admin.infinos.com',
+      
+      // ✅ Development
+      'http://localhost:3000',  // User dev
+      'http://localhost:3001',  // Admin dev
     ];
     
     // Check if origin is allowed
@@ -38,11 +45,11 @@ const corsOptions = {
     );
     
     if (isAllowed) {
-      console.log('✅ CORS allowed for origin:', origin);
+      console.log('✅ CORS allowed for:', origin);
       callback(null, true);
     } else {
-      console.log('⚠️ CORS allowed (permissive) for origin:', origin);
-      // Still allow but log warning
+      console.log('⚠️ CORS blocked for:', origin);
+      // Still allow but log warning (permissive mode)
       callback(null, true);
     }
   },
@@ -66,7 +73,6 @@ app.use(cors(corsOptions));
 
 // ✅ Handle preflight requests explicitly
 app.options('*', cors(corsOptions));
-
 /* =========================
    BODY PARSERS
 ========================= */
