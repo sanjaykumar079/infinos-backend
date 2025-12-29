@@ -50,7 +50,7 @@ async function optionalSupabaseAuth(req, res, next) {
     if (!error && data?.user) {
       req.user = { id: data.user.id, email: data.user.email };
     }
-    
+
     next();
   } catch (err) {
     console.error('Optional auth error:', err);
@@ -143,7 +143,7 @@ router.post('/auth', async (req, res) => {
       .update({ last_seen: new Date().toISOString() })
       .eq('id', device.id);
 
-    res.json({ 
+    res.json({
       authenticated: true,
       device: {
         id: device.id,
@@ -169,26 +169,26 @@ router.get('/verify-code', async (req, res) => {
       .single();
 
     if (error || !device) {
-      return res.status(404).json({ 
+      return res.status(404).json({
         valid: false,
-        message: 'Invalid device code' 
+        message: 'Invalid device code'
       });
     }
 
     if (device.is_claimed) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         valid: false,
-        message: 'Bag already claimed' 
+        message: 'Bag already claimed'
       });
     }
 
-    res.json({ 
+    res.json({
       valid: true,
       device: {
         deviceCode: device.device_code,
         bagType: device.bag_type,
-        bagTypeName: device.bag_type === 'dual-zone' ? 'Hot & Cold Zones' : 
-                     device.bag_type === 'cooling-only' ? 'Cooling Only' : 'Heating Only',
+        bagTypeName: device.bag_type === 'dual-zone' ? 'Hot & Cold Zones' :
+          device.bag_type === 'cooling-only' ? 'Cooling Only' : 'Heating Only',
         hardwareVersion: device.hardware_version,
         manufacturingDate: device.manufacturing_date
       }
@@ -209,8 +209,8 @@ router.post('/claim', verifySupabaseUser, async (req, res) => {
     const { deviceCode, ownerId, deviceName } = req.body;
 
     if (req.user.id !== ownerId) {
-      return res.status(403).json({ 
-        message: 'Unauthorized to claim device for another user' 
+      return res.status(403).json({
+        message: 'Unauthorized to claim device for another user'
       });
     }
 
@@ -221,14 +221,14 @@ router.post('/claim', verifySupabaseUser, async (req, res) => {
       .single();
 
     if (fetchError || !device) {
-      return res.status(404).json({ 
-        message: 'Delivery bag not found. Please check your code.' 
+      return res.status(404).json({
+        message: 'Delivery bag not found. Please check your code.'
       });
     }
 
     if (device.is_claimed) {
-      return res.status(400).json({ 
-        message: 'This bag has already been claimed.' 
+      return res.status(400).json({
+        message: 'This bag has already been claimed.'
       });
     }
 
@@ -249,7 +249,7 @@ router.post('/claim', verifySupabaseUser, async (req, res) => {
       throw updateError;
     }
 
-    res.json({ 
+    res.json({
       message: 'Delivery bag claimed successfully!',
       device: {
         id: updated.id,
@@ -269,15 +269,15 @@ router.post('/claim', verifySupabaseUser, async (req, res) => {
 router.get('/my-devices', optionalSupabaseAuth, async (req, res) => {
   try {
     const ownerId = req.query.ownerId || req.user?.id;
-    
+
     if (!ownerId) {
       return res.status(400).json({ error: 'Missing ownerId parameter and no authenticated user' });
     }
 
     // Only check authorization if user is authenticated
     if (req.user && req.user.id !== ownerId) {
-      return res.status(403).json({ 
-        message: 'Unauthorized to access other user devices' 
+      return res.status(403).json({
+        message: 'Unauthorized to access other user devices'
       });
     }
 
@@ -302,15 +302,15 @@ router.get('/my-devices', optionalSupabaseAuth, async (req, res) => {
 router.get('/summary', optionalSupabaseAuth, async (req, res) => {
   try {
     const ownerId = req.query.ownerId || req.user?.id;
-    
+
     if (!ownerId) {
       return res.status(400).json({ error: 'Missing ownerId parameter and no authenticated user' });
     }
 
     // Only check authorization if user is authenticated
     if (req.user && req.user.id !== ownerId) {
-      return res.status(403).json({ 
-        message: 'Unauthorized to access other user data' 
+      return res.status(403).json({
+        message: 'Unauthorized to access other user data'
       });
     }
 
@@ -366,8 +366,8 @@ router.get('/get_device', optionalSupabaseAuth, async (req, res) => {
 
     // Only check ownership if user is authenticated
     if (req.user && device.owner_id !== req.user.id) {
-      return res.status(403).json({ 
-        message: 'Unauthorized to access this device' 
+      return res.status(403).json({
+        message: 'Unauthorized to access this device'
       });
     }
 
@@ -404,13 +404,13 @@ router.get('/get_device', optionalSupabaseAuth, async (req, res) => {
         currentHumidity: device.hot_zone_current_humidity,
         heaterOn: device.hot_zone_heater_on,
         fanOn: device.hot_zone_fan_on,
-        tempHistory: hotReadings?.map(r => ({ 
-          value: r.temperature, 
-          timestamp: r.timestamp 
+        tempHistory: hotReadings?.map(r => ({
+          value: r.temperature,
+          timestamp: r.timestamp
         })) || [],
-        humidityHistory: hotReadings?.map(r => ({ 
-          value: r.humidity, 
-          timestamp: r.timestamp 
+        humidityHistory: hotReadings?.map(r => ({
+          value: r.humidity,
+          timestamp: r.timestamp
         })) || []
       } : null,
       coldZone: device.bag_type !== 'heating-only' ? {
@@ -419,22 +419,22 @@ router.get('/get_device', optionalSupabaseAuth, async (req, res) => {
         currentHumidity: device.cold_zone_current_humidity,
         coolerOn: device.cold_zone_cooler_on,
         fanOn: device.cold_zone_fan_on,
-        tempHistory: coldReadings?.map(r => ({ 
-          value: r.temperature, 
-          timestamp: r.timestamp 
+        tempHistory: coldReadings?.map(r => ({
+          value: r.temperature,
+          timestamp: r.timestamp
         })) || [],
-        humidityHistory: coldReadings?.map(r => ({ 
-          value: r.humidity, 
-          timestamp: r.timestamp 
+        humidityHistory: coldReadings?.map(r => ({
+          value: r.humidity,
+          timestamp: r.timestamp
         })) || []
       } : null,
       battery: {
         chargeLevel: device.battery_charge_level,
         voltage: device.battery_voltage,
         isCharging: device.battery_is_charging,
-        chargeHistory: batteryReadings?.map(r => ({ 
-          value: r.charge_level, 
-          timestamp: r.timestamp 
+        chargeHistory: batteryReadings?.map(r => ({
+          value: r.charge_level,
+          timestamp: r.timestamp
         })) || []
       },
       safetyLimits: {
@@ -465,15 +465,15 @@ router.post('/update_device', optionalSupabaseAuth, async (req, res) => {
         .single();
 
       if (device && device.owner_id !== req.user.id) {
-        return res.status(403).json({ 
-          message: 'Unauthorized to update this device' 
+        return res.status(403).json({
+          message: 'Unauthorized to update this device'
         });
       }
     }
 
     const { data, error } = await supabase
       .from('devices')
-      .update({ 
+      .update({
         status: status,
         last_seen: new Date().toISOString()
       })
@@ -642,8 +642,8 @@ router.post('/update_hot_zone_settings', optionalSupabaseAuth, async (req, res) 
 
     // Only check ownership if user is authenticated
     if (req.user && device.owner_id !== req.user.id) {
-      return res.status(403).json({ 
-        message: 'Unauthorized to update this device' 
+      return res.status(403).json({
+        message: 'Unauthorized to update this device'
       });
     }
 
@@ -688,8 +688,8 @@ router.post('/update_cold_zone_settings', optionalSupabaseAuth, async (req, res)
 
     // Only check ownership if user is authenticated
     if (req.user && device.owner_id !== req.user.id) {
-      return res.status(403).json({ 
-        message: 'Unauthorized to update this device' 
+      return res.status(403).json({
+        message: 'Unauthorized to update this device'
       });
     }
 
@@ -736,8 +736,8 @@ router.get('/alerts', optionalSupabaseAuth, async (req, res) => {
 
     // Only check ownership if user is authenticated
     if (req.user && device.owner_id !== req.user.id) {
-      return res.status(403).json({ 
-        message: 'Unauthorized to access this device' 
+      return res.status(403).json({
+        message: 'Unauthorized to access this device'
       });
     }
 
@@ -827,7 +827,7 @@ router.get('/admin-stats', authenticateAdminPasskey, async (req, res) => {
     const heatingOnly = devices.filter(d => d.bag_type === 'heating-only').length;
     const coolingOnly = devices.filter(d => d.bag_type === 'cooling-only').length;
     const claimed = devices.filter(d => d.is_claimed === true).length;
-    
+
     const uniqueOwners = new Set(
       devices
         .filter(d => d.owner_id)
@@ -857,23 +857,23 @@ router.post('/seed-devices', authenticateAdminPasskey, async (req, res) => {
     const { bagType, quantity } = req.body;
 
     if (!bagType || !['dual-zone', 'heating-only', 'cooling-only'].includes(bagType)) {
-      return res.status(400).json({ 
-        message: 'Invalid bag type. Must be "dual-zone", "heating-only", or "cooling-only"' 
+      return res.status(400).json({
+        message: 'Invalid bag type. Must be "dual-zone", "heating-only", or "cooling-only"'
       });
     }
 
     if (!quantity || quantity < 1 || quantity > 100) {
-      return res.status(400).json({ 
-        message: 'Quantity must be between 1 and 100' 
+      return res.status(400).json({
+        message: 'Quantity must be between 1 and 100'
       });
     }
 
     const devicesToCreate = [];
     for (let i = 0; i < quantity; i++) {
-      const bagName = bagType === 'dual-zone' ? 'Dual-Zone' : 
-                      bagType === 'cooling-only' ? 'Cooling-Only' : 
-                      'Heating-Only';
-      
+      const bagName = bagType === 'dual-zone' ? 'Dual-Zone' :
+        bagType === 'cooling-only' ? 'Cooling-Only' :
+          'Heating-Only';
+
       const baseDevice = {
         name: `${bagName} Bag ${Date.now()}-${i}`,
         device_code: generateDeviceCode(),
@@ -955,9 +955,149 @@ router.post('/seed-devices', authenticateAdminPasskey, async (req, res) => {
     });
   } catch (err) {
     console.error('Seed devices error:', err);
-    res.status(500).json({ 
-      message: 'Failed to create devices', 
-      error: err.message 
+    res.status(500).json({
+      message: 'Failed to create devices',
+      error: err.message
+    });
+  }
+});
+
+// Add single device (admin only)
+router.post('/admin/add-device', async (req, res) => {
+  try {
+    console.log('📦 Add device request:', req.body);
+
+    // Check for admin_key in body (from AdminDashboard.js)
+    const adminKey = req.body.admin_key || req.headers['x-admin-passkey'];
+    const ADMIN_PASSKEY = process.env.ADMIN_PASSKEY || 'INFINOS2025ADMIN';
+
+    if (!adminKey || adminKey !== ADMIN_PASSKEY) {
+      return res.status(403).json({ message: 'Unauthorized: Invalid admin passkey' });
+    }
+
+    const { name, device_code, bag_type } = req.body;
+
+    // Validation
+    if (!name || !device_code || !bag_type) {
+      return res.status(400).json({
+        message: 'Missing required fields: name, device_code, and bag_type are required'
+      });
+    }
+
+    if (!['dual-zone', 'heating-only', 'cooling-only'].includes(bag_type)) {
+      return res.status(400).json({
+        message: 'Invalid bag type. Must be "dual-zone", "heating-only", or "cooling-only"'
+      });
+    }
+
+    // Check if device code already exists
+    const { data: existing } = await supabase
+      .from('devices')
+      .select('device_code')
+      .eq('device_code', device_code)
+      .single();
+
+    if (existing) {
+      return res.status(400).json({
+        message: 'Device code already exists. Please use a unique code.'
+      });
+    }
+
+    // Create base device object
+    const baseDevice = {
+      name,
+      device_code,
+      device_secret: generateDeviceSecret(),
+      bag_type,
+      hardware_version: 'v2.0',
+      manufacturing_date: new Date().toISOString(),
+      status: false,
+      is_claimed: false,
+      battery_charge_level: 100,
+      battery_voltage: 12.6,
+      battery_is_charging: false,
+      safety_min_temp: 0,
+      safety_max_temp: 100,
+      safety_low_battery: 20,
+      created_at: new Date().toISOString()
+    };
+
+    // Configure zones based on bag type
+    let deviceToCreate;
+    if (bag_type === 'cooling-only') {
+      deviceToCreate = {
+        ...baseDevice,
+        hot_zone_current_temp: null,
+        hot_zone_target_temp: null,
+        hot_zone_current_humidity: null,
+        hot_zone_heater_on: null,
+        hot_zone_fan_on: null,
+        cold_zone_current_temp: 25,
+        cold_zone_target_temp: 5,
+        cold_zone_current_humidity: 60,
+        cold_zone_cooler_on: false,
+        cold_zone_fan_on: false,
+      };
+    } else if (bag_type === 'heating-only') {
+      deviceToCreate = {
+        ...baseDevice,
+        hot_zone_current_temp: 25,
+        hot_zone_target_temp: 60,
+        hot_zone_current_humidity: 50,
+        hot_zone_heater_on: false,
+        hot_zone_fan_on: false,
+        cold_zone_current_temp: null,
+        cold_zone_target_temp: null,
+        cold_zone_current_humidity: null,
+        cold_zone_cooler_on: null,
+        cold_zone_fan_on: null,
+      };
+    } else { // dual-zone
+      deviceToCreate = {
+        ...baseDevice,
+        hot_zone_current_temp: 25,
+        hot_zone_target_temp: 60,
+        hot_zone_current_humidity: 50,
+        hot_zone_heater_on: false,
+        hot_zone_fan_on: false,
+        cold_zone_current_temp: 25,
+        cold_zone_target_temp: 5,
+        cold_zone_current_humidity: 60,
+        cold_zone_cooler_on: false,
+        cold_zone_fan_on: false,
+      };
+    }
+
+    // Insert into database
+    const { data: createdDevice, error } = await supabase
+      .from('devices')
+      .insert([deviceToCreate])
+      .select()
+      .single();
+
+    if (error) {
+      console.error('❌ Database error:', error);
+      throw error;
+    }
+
+    console.log('✅ Device created successfully:', createdDevice.device_code);
+
+    res.status(201).json({
+      success: true,
+      message: 'Device created successfully!',
+      device: {
+        id: createdDevice.id,
+        name: createdDevice.name,
+        code: createdDevice.device_code,
+        secret: createdDevice.device_secret,
+        type: createdDevice.bag_type
+      }
+    });
+  } catch (err) {
+    console.error('❌ Add device error:', err);
+    res.status(500).json({
+      message: 'Failed to create device',
+      error: err.message
     });
   }
 });
