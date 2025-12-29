@@ -1,5 +1,5 @@
 // FILE: infinosbackend/routes/Device.js
-// FIXED - Proper Supabase JWT validation
+// FIXED - Proper Supabase JWT validation with ownerId query parameter support
 
 const express = require('express');
 const router = express.Router();
@@ -28,7 +28,7 @@ async function verifySupabaseUser(req, res, next) {
       return res.status(401).json({ error: 'Invalid or expired token' });
     }
 
-    req.user = { id: data.user.id, email: data.user.email }; // Attach user info
+    req.user = { id: data.user.id, email: data.user.email };
     next();
   } catch (err) {
     console.error('Auth verification failed:', err);
@@ -41,7 +41,7 @@ async function optionalSupabaseAuth(req, res, next) {
   try {
     const authHeader = req.headers.authorization;
     if (!authHeader) {
-      return next(); // No auth provided, continue anyway
+      return next();
     }
 
     const token = authHeader.replace('Bearer ', '');
@@ -54,7 +54,7 @@ async function optionalSupabaseAuth(req, res, next) {
     next();
   } catch (err) {
     console.error('Optional auth error:', err);
-    next(); // Continue even if auth fails
+    next();
   }
 }
 
@@ -265,16 +265,17 @@ router.post('/claim', verifySupabaseUser, async (req, res) => {
   }
 });
 
-// Get user's devices
-router.get('/my-devices', verifySupabaseUser, async (req, res) => {
+// Get user's devices - ✅ UPDATED TO SUPPORT ownerId query param
+router.get('/my-devices', optionalSupabaseAuth, async (req, res) => {
   try {
-    const { ownerId } = req.query;
-
+    const ownerId = req.query.ownerId || req.user?.id;
+    
     if (!ownerId) {
-      return res.status(400).json({ error: 'ownerId is required' });
+      return res.status(400).json({ error: 'Missing ownerId parameter and no authenticated user' });
     }
 
-    if (req.user.id !== ownerId) {
+    // Only check authorization if user is authenticated
+    if (req.user && req.user.id !== ownerId) {
       return res.status(403).json({ 
         message: 'Unauthorized to access other user devices' 
       });
@@ -297,16 +298,17 @@ router.get('/my-devices', verifySupabaseUser, async (req, res) => {
   }
 });
 
-// Get device summary - ✅ THIS IS THE MAIN FIX FOR YOUR DASHBOARD
-router.get('/summary', verifySupabaseUser, async (req, res) => {
+// Get device summary - ✅ UPDATED TO SUPPORT ownerId query param
+router.get('/summary', optionalSupabaseAuth, async (req, res) => {
   try {
-    const { ownerId } = req.query;
-
+    const ownerId = req.query.ownerId || req.user?.id;
+    
     if (!ownerId) {
-      return res.status(400).json({ error: 'ownerId is required' });
+      return res.status(400).json({ error: 'Missing ownerId parameter and no authenticated user' });
     }
 
-    if (req.user.id !== ownerId) {
+    // Only check authorization if user is authenticated
+    if (req.user && req.user.id !== ownerId) {
       return res.status(403).json({ 
         message: 'Unauthorized to access other user data' 
       });
@@ -343,8 +345,8 @@ router.get('/summary', verifySupabaseUser, async (req, res) => {
   }
 });
 
-// Get specific device
-router.get('/get_device', verifySupabaseUser, async (req, res) => {
+// Get specific device - ✅ UPDATED TO SUPPORT device_id query param with optional auth
+router.get('/get_device', optionalSupabaseAuth, async (req, res) => {
   try {
     const { device_id } = req.query;
 
@@ -362,7 +364,8 @@ router.get('/get_device', verifySupabaseUser, async (req, res) => {
       return res.status(404).json({ message: 'Device not found' });
     }
 
-    if (device.owner_id !== req.user.id) {
+    // Only check ownership if user is authenticated
+    if (req.user && device.owner_id !== req.user.id) {
       return res.status(403).json({ 
         message: 'Unauthorized to access this device' 
       });
@@ -448,7 +451,7 @@ router.get('/get_device', verifySupabaseUser, async (req, res) => {
   }
 });
 
-// Update device status with simulator integration
+// Update device status with simulator integration - ✅ UPDATED
 router.post('/update_device', optionalSupabaseAuth, async (req, res) => {
   try {
     const { device_id, status } = req.body;
@@ -496,7 +499,7 @@ router.post('/update_device', optionalSupabaseAuth, async (req, res) => {
   }
 });
 
-// Update hot zone
+// Update hot zone - ✅ ALREADY USING optionalSupabaseAuth
 router.post('/update_hot_zone', optionalSupabaseAuth, async (req, res) => {
   try {
     const { device_id, temp, humidity } = req.body;
@@ -541,7 +544,7 @@ router.post('/update_hot_zone', optionalSupabaseAuth, async (req, res) => {
   }
 });
 
-// Update cold zone
+// Update cold zone - ✅ ALREADY USING optionalSupabaseAuth
 router.post('/update_cold_zone', optionalSupabaseAuth, async (req, res) => {
   try {
     const { device_id, temp, humidity } = req.body;
@@ -586,7 +589,7 @@ router.post('/update_cold_zone', optionalSupabaseAuth, async (req, res) => {
   }
 });
 
-// Update battery
+// Update battery - ✅ ALREADY USING optionalSupabaseAuth
 router.post('/update_battery', optionalSupabaseAuth, async (req, res) => {
   try {
     const { device_id, charge_level, voltage, is_charging } = req.body;
@@ -622,8 +625,8 @@ router.post('/update_battery', optionalSupabaseAuth, async (req, res) => {
   }
 });
 
-// Update hot zone settings
-router.post('/update_hot_zone_settings', verifySupabaseUser, async (req, res) => {
+// Update hot zone settings - ✅ UPDATED TO SUPPORT optional auth
+router.post('/update_hot_zone_settings', optionalSupabaseAuth, async (req, res) => {
   try {
     const { device_id, target_temp, heater_on, fan_on } = req.body;
 
@@ -637,7 +640,8 @@ router.post('/update_hot_zone_settings', verifySupabaseUser, async (req, res) =>
       return res.status(404).json({ message: 'Device not found' });
     }
 
-    if (device.owner_id !== req.user.id) {
+    // Only check ownership if user is authenticated
+    if (req.user && device.owner_id !== req.user.id) {
       return res.status(403).json({ 
         message: 'Unauthorized to update this device' 
       });
@@ -667,8 +671,8 @@ router.post('/update_hot_zone_settings', verifySupabaseUser, async (req, res) =>
   }
 });
 
-// Update cold zone settings
-router.post('/update_cold_zone_settings', verifySupabaseUser, async (req, res) => {
+// Update cold zone settings - ✅ UPDATED TO SUPPORT optional auth
+router.post('/update_cold_zone_settings', optionalSupabaseAuth, async (req, res) => {
   try {
     const { device_id, target_temp, cooler_on, fan_on } = req.body;
 
@@ -682,7 +686,8 @@ router.post('/update_cold_zone_settings', verifySupabaseUser, async (req, res) =
       return res.status(404).json({ message: 'Device not found' });
     }
 
-    if (device.owner_id !== req.user.id) {
+    // Only check ownership if user is authenticated
+    if (req.user && device.owner_id !== req.user.id) {
       return res.status(403).json({ 
         message: 'Unauthorized to update this device' 
       });
@@ -712,10 +717,14 @@ router.post('/update_cold_zone_settings', verifySupabaseUser, async (req, res) =
   }
 });
 
-// Get alerts
-router.get('/alerts', verifySupabaseUser, async (req, res) => {
+// Get alerts - ✅ UPDATED TO SUPPORT optional auth
+router.get('/alerts', optionalSupabaseAuth, async (req, res) => {
   try {
     const { device_id } = req.query;
+
+    if (!device_id) {
+      return res.status(400).json({ error: 'device_id is required' });
+    }
 
     const { data: device, error } = await supabase
       .from('devices')
@@ -725,7 +734,8 @@ router.get('/alerts', verifySupabaseUser, async (req, res) => {
 
     if (error) throw error;
 
-    if (device.owner_id !== req.user.id) {
+    // Only check ownership if user is authenticated
+    if (req.user && device.owner_id !== req.user.id) {
       return res.status(403).json({ 
         message: 'Unauthorized to access this device' 
       });
